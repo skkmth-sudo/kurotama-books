@@ -1,0 +1,29 @@
+[
+  {
+    "id": "978-1",
+    "title": "Effective TypeScript",
+    "author": "Dan Vanderkam",
+    "price": 4500,
+    "reviews": 320,
+    "rating": 4.7,
+    "category": "programming"
+  },
+  {
+    "id": "978-2",
+    "title": "Clean Architecture",
+    "author": "Robert C. Martin",
+    "price": 3800,
+    "reviews": 920,
+    "rating": 4.5,
+    "category": "business"
+  },
+  {
+    "id": "978-3",
+    "title": "プロを目指す人のためのTypeScript入門",
+    "author": "市谷聡啓",
+    "price": 3200,
+    "reviews": 210,
+    "rating": 4.6,
+    "category": "programming"
+  }
+]

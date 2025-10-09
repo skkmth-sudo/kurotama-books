@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+/* === 森の図書館 児童書ランキング 背景 === */
+body {
+  background: linear-gradient(
+      180deg,
+      #e8f5e9 0%,   /* やわらかいミントグリーン */
+      #f1f8e9 40%,  /* 木漏れ日っぽい黄緑 */
+      #fffdf7 80%   /* 下は少し光が差す白 */
+    ),
+    url("https://www.transparenttextures.com/patterns/wood-pattern.png");
+  background-repeat: repeat;
+  background-size: 500px 500px;
+  background-attachment: fixed;
+  color: #3a2e1f; /* やや茶色系文字色 */
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+}
+
