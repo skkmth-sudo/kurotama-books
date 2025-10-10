@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "森の図書館",
+  title: "えほんの森",
   description: "児童書・絵本のランキングサイト",
 };
 
@@ -33,7 +33,7 @@ export default function RootLayout({
         <header className="w-full bg-white/70 backdrop-blur border-b border-green-100">
           <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
             <Link href="/ranking" className="text-lg font-bold text-green-800">
-              🌲 森の図書館
+              🌲 えほんの森
             </Link>
             <nav className="flex gap-5 text-sm text-gray-700">
               <Link href="/ranking" className="hover:underline">ランキング</Link>
