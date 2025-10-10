@@ -18,8 +18,8 @@ export const metadata = {
         <section className="space-y-2 mb-8">
           <h2 className="text-xl font-semibold">URL</h2>
           <p>
-            <a href="https://kurotama-app.example" className="underline text-blue-700">
-              https://kurotama-app.example
+            <a href="https://ehonnnomori-j4at22lgg-sugisakas-projects.vercel.app/ranking" className="underline text-blue-700">
+              https://ehonnnomori-j4at22lgg-sugisakas-projects.vercel.app/ranking
             </a>
           </p>
         </section>
