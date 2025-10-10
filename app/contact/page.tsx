@@ -13,7 +13,7 @@ export default function ContactPage() {
   const isValid = name && /\S+@\S+\.\S+/.test(mail) && msg.length >= 10;
 
   const mailto = useMemo(() => {
-    const subject = `【森の図書館】${topic}`;
+    const subject = `【えほんの森】${topic}`;
     const body = [
       `お名前: ${name}`,
       `メール: ${mail}`,
@@ -21,7 +21,7 @@ export default function ContactPage() {
       msg,
       "",
       "---",
-      "※ このメールは森の図書館 お問い合わせフォームから送信されました。",
+      "※ このメールはえほんの森 お問い合わせフォームから送信されました。",
     ].join("\n");
     return `mailto:${CONTACT_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }, [name, mail, topic, msg]);

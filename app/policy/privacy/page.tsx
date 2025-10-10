@@ -1,6 +1,6 @@
 // app/policy/privacy/page.tsx
 export const metadata = {
-    title: "プライバシーポリシー | 森の図書館",
+    title: "プライバシーポリシー | えほんの森",
     description:
       "当サイトにおける個人情報・Cookie・アクセス解析・広告の取扱いについての方針を定めています。",
   };
@@ -10,12 +10,12 @@ export const metadata = {
       <main className="max-w-3xl mx-auto px-6 py-12 text-gray-800 leading-relaxed">
         <div className="bg-gradient-to-r from-green-50 to-amber-50 rounded-3xl p-6 shadow-sm border border-green-100 mb-10">
           <h1 className="text-3xl font-extrabold text-green-900 mb-2">🔒 プライバシーポリシー</h1>
-          <p className="text-sm text-gray-600">最終更新日：2025年10月9日｜森の図書館</p>
+          <p className="text-sm text-gray-600">最終更新日：2025年10月9日｜えほんの森</p>
         </div>
   
         <section className="space-y-6">
           <p>
-            「森の図書館」（以下「当サイト」）は、個人情報保護法その他関連法令を遵守し、
+            「えほんの森」（以下「当サイト」）は、個人情報保護法その他関連法令を遵守し、
             個人情報の適切な取り扱いと保護に努めます。
           </p>
   

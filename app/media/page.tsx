@@ -1,8 +1,8 @@
 // app/media/page.tsx
 export const metadata = {
-    title: "媒体情報 | 森の図書館（児童書ランキング）",
+    title: "媒体情報 | えほんの森（児童書ランキング）",
     description:
-      "児童書・絵本のおすすめを分かりやすく紹介する個人メディア『森の図書館』の媒体情報ページです。",
+      "児童書・絵本のおすすめを分かりやすく紹介する個人メディア『えほんの森』の媒体情報ページです。",
   };
   
   export default function MediaPage() {
@@ -12,7 +12,7 @@ export const metadata = {
   
         <section className="space-y-2 mb-8">
           <h2 className="text-xl font-semibold">サイト名</h2>
-          <p>森の図書館（児童書ランキング）</p>
+          <p>えほんの森（児童書ランキング）</p>
         </section>
   
         <section className="space-y-2 mb-8">
