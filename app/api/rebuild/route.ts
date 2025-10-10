@@ -1,9 +1,8 @@
-// app/api/rebuild/route.ts
+// app/api/rebuild/route.ts（抜粋・全体置き換えOK）
 import { NextResponse } from "next/server";
 
 const QIITA_TOKEN = process.env.QIITA_TOKEN;
 
-// ---- 1) 収集設定（カテゴリやクエリは自由に増やせる）
 const TOPIC_QUERIES = [
   "絵本", "読み聞かせ", "児童書", "育児 絵本", "科学 絵本", "動物 絵本"
 ];
@@ -14,20 +13,22 @@ type QiitaItem = {
 };
 
 type BookAgg = {
-  id: string;                    // ISBN13 or ASIN or normalized title
-  title: string;                 // 書名
-  asin?: string; isbn?: string;
+  id: string;
+  title: string;
+  asin?: string;
+  isbn?: string;
   mentions: number;
-  score: number;
-  sources: { qiitaId: string; url: string; title: string }[];
+  score: number; // ← いいね合計
+  totalLikes: number;  // ← 明示的に持つ
+  totalStocks: number; // ← 参考表示用
+  sources: { qiitaId: string; url: string; title: string; likes: number; stocks: number }[];
 };
 
 const POSITIVE = ["絵本","えほん","児童","幼児","子ども","こども","読み聞かせ"];
 const NG = ["白書","年鑑","統計","研究","論文","入門","教科書","参考書","問題集","ビジネス","投資"];
 
 const ASIN_RE = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i;
-const ISBN_RE = /\b97[89]\d{10}\b/; // 簡易ISBN13
-
+const ISBN_RE = /\b97[89]\d{10}\b/;
 const titleMarks = [/『([^』]{2,60})』/g, /「([^」]{2,60})」/g, /《([^》]{2,60})》/g];
 
 function normTitle(s: string) {
@@ -78,17 +79,19 @@ export async function GET() {
         if (isbn) keys.push(`isbn:${isbn}`);
         if (asin) keys.push(`asin:${asin}`);
         for (const t of titles) keys.push(`title:${t}`);
+        if (keys.length === 0) continue;
 
-        if (keys.length === 0) continue; // 書籍候補が拾えなかった
-
-        const weight = Math.log1p((it.stocks_count ?? 0) + (it.likes_count ?? 0));
+        const likes = it.likes_count ?? 0;
+        const stocks = it.stocks_count ?? 0;
 
         for (const k of keys) {
           const existing = bookMap.get(k);
           if (existing) {
             existing.mentions += 1;
-            existing.score += 1 + weight;
-            existing.sources.push({ qiitaId: it.id, url: it.url, title: it.title });
+            existing.totalLikes += likes;
+            existing.totalStocks += stocks;
+            existing.score = existing.totalLikes; // いいね合計でランキング
+            existing.sources.push({ qiitaId: it.id, url: it.url, title: it.title, likes, stocks });
           } else {
             bookMap.set(k, {
               id: k,
@@ -96,8 +99,10 @@ export async function GET() {
               asin: asin || undefined,
               isbn: isbn || undefined,
               mentions: 1,
-              score: 1 + weight,
-              sources: [{ qiitaId: it.id, url: it.url, title: it.title }],
+              totalLikes: likes,
+              totalStocks: stocks,
+              score: likes, // 初期スコア
+              sources: [{ qiitaId: it.id, url: it.url, title: it.title, likes, stocks }],
             });
           }
         }

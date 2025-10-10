@@ -1,178 +1,142 @@
 ﻿"use client";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
-import { useEffect, useState } from "react";
-
-type RankedBook = {
-  title: string;
-  mentions: number;
-  score: number;
-  sources: { qiitaId: string; url: string }[];
+type Source = { qiitaId: string; url: string; title: string; likes: number; stocks: number };
+type BookAgg = {
+  id: string; title: string; asin?: string; isbn?: string;
+  mentions: number; score: number; totalLikes: number; totalStocks: number;
+  sources: Source[];
 };
 
 export default function RankingPage() {
-  const [items, setItems] = useState<RankedBook[]>([]);
-  const [query, setQuery] = useState("絵本");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<BookAgg[]>([]);
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState<string | null>(null);
 
-  async function fetchData(q: string) {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(
-        `/api/qiita-picture-books?q=${encodeURIComponent(q)}`,
-        { cache: "no-store" }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const received: RankedBook[] = data.ranking ?? [];
-      setItems(received);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+  async function load() {
+    const res = await fetch(`/api/rebuild?ts=${Date.now()}`, { cache: "no-store" });
+    const json = await res.json();
+    setItems((json.ranking || []) as BookAgg[]);
   }
 
-  useEffect(() => {
-    fetchData(query);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const pastelColors = [
-    "bg-yellow-50 border-yellow-200",
-    "bg-green-50 border-green-200",
-    "bg-blue-50 border-blue-200",
-    "bg-pink-50 border-pink-200",
-    "bg-purple-50 border-purple-200",
-  ];
-
-  const presets = ["絵本", "読み聞かせ", "動物 絵本", "冒険 絵本", "科学 絵本", "はじめての漢字"];
+  const filtered = useMemo(() => {
+    if (!q) return items;
+    const needle = q.toLowerCase();
+    return items.filter(
+      (b) =>
+        b.title.toLowerCase().includes(needle) ||
+        b.sources.some((s) => s.title.toLowerCase().includes(needle))
+    );
+  }, [items, q]);
 
   return (
-    <main className="max-w-5xl mx-auto p-6 font-sans">
-      <h1 className="text-4xl font-extrabold text-center mb-8 text-green-900 drop-shadow-md">
-        <span className="bg-amber-100 px-6 py-2 rounded-3xl shadow-sm border border-amber-200">
-          🌲 人気児童書ランキング（Qiita言及ベース）
-        </span>
-      </h1>
+    <main className="max-w-6xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-4">📚 えほんの森 ランキング（👍=Qiita いいね合計）</h1>
 
-      {/* プリセット */}
-      <div className="flex flex-wrap justify-center gap-2 mb-4">
-        {presets.map((p) => (
-          <button
-            key={p}
-            onClick={() => {
-              setQuery(p);
-              fetchData(p);
-            }}
-            className="rounded-full border border-green-300 bg-white/80 px-3 py-1 text-sm text-green-700 hover:bg-green-50"
-          >
-            #{p}
-          </button>
-        ))}
-      </div>
-
-      {/* 検索 */}
-      <div className="flex flex-wrap gap-2 justify-center mb-8">
+      <div className="flex gap-2 mb-6">
         <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="テーマを検索（例：絵本・冒険・動物・科学）"
-          className="border border-yellow-300 rounded-full px-4 py-2 w-72 focus:ring-2 focus:ring-amber-300 outline-none"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="border rounded px-3 py-2 w-80"
+          placeholder="タイトル・記事を検索"
         />
-        <button
-          onClick={() => fetchData(query)}
-          disabled={loading}
-          className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow"
-        >
-          {loading ? "よみこみ中..." : "検索"}
+        <button onClick={load} className="px-4 py-2 rounded bg-emerald-600 text-white">
+          再集計
         </button>
-
-        <button
-          onClick={() => fetchData(query)} // API側で最大50件返す設計
-          disabled={loading}
-          className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow"
-        >
-          いっぱい見る（最大50件）
-        </button>
+        <Link href="/posts" className="ml-auto underline text-sm text-blue-700">
+          記事一覧へ
+        </Link>
       </div>
 
-      {error && (
-        <p className="text-red-600 text-center mb-4">取得に失敗しました：{error}</p>
-      )}
-
-      {/* カード一覧 */}
-      <div className="space-y-4">
-        {items.map((b, idx) => {
-          const firstSource = b.sources?.[0]?.url;
-          const otherCount = Math.max(0, (b.sources?.length ?? 0) - 1);
+      <ul className="space-y-3">
+        {filtered.map((b, i) => {
+          const isOpen = active === b.id;
           return (
-            <div
-              key={`${b.title}-${idx}`}
-              className={`rounded-3xl shadow-md border p-4 transition hover:-translate-y-1 hover:shadow-lg ${pastelColors[idx % pastelColors.length]}`}
-            >
-              <div className="flex gap-4">
-                {/* アイコン（表紙は使わない） */}
-                <div className="w-24 h-24 flex-shrink-0 grid place-items-center rounded-xl border border-amber-200 bg-white text-4xl">
-                  {idx === 0 ? "🌳" : idx === 1 ? "🍃" : idx === 2 ? "📗" : "📖"}
+            <li key={b.id} className="border rounded-2xl bg-white shadow-sm">
+              {/* ヘッダー行（クリックで開閉） */}
+              <button
+                onClick={() => setActive(isOpen ? null : b.id)}
+                className="w-full text-left p-4 flex items-start justify-between gap-3"
+              >
+                <div>
+                  <h2 className="font-semibold text-lg">
+                    {i < 9 ? `#0${i + 1}` : `#${i + 1}`} {b.title}
+                  </h2>
+                  <div className="mt-1 text-sm text-gray-600 flex flex-wrap gap-3">
+                    <span>👍 {b.totalLikes}</span>
+                    <span>🗂️ 言及 {b.mentions}</span>
+                    {b.totalStocks ? <span>⭐ ストック {b.totalStocks}</span> : null}
+                  </div>
                 </div>
 
-                {/* 本文 */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <h2 className="font-semibold text-lg text-green-900 leading-snug">
-                      <a
-                        href={firstSource ?? "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                        title={firstSource ? "Qiita出典へ" : undefined}
-                      >
-                        {b.title}
-                      </a>
-                    </h2>
-
-                    {/* 言及バッジ */}
-                    <span
-                      className="shrink-0 inline-flex items-center rounded-full bg-emerald-600 text-white px-3 py-1 text-sm font-bold shadow"
-                      title="Qiita上の言及スコア"
+                <div className="shrink-0 flex items-center gap-2">
+                  {b.asin ? (
+                    <a
+                      href={`/api/out/amazon?asin=${b.asin}`}
+                      className="inline-block text-xs px-3 py-1 rounded bg-orange-600 text-white"
+                      target="_blank" rel="nofollow sponsored noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      🔎 言及 {b.mentions}
-                    </span>
-                  </div>
+                      PR: Amazonで見る
+                    </a>
+                  ) : (
+                    <a
+                      href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(b.title)}`}
+                      className="inline-block text-xs px-3 py-1 rounded bg-gray-700 text-white"
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Amazonで探す
+                    </a>
+                  )}
 
-                  {/* 出典リンク（最大3） */}
-                  {!!b.sources?.length && (
-                    <div className="mt-2 text-sm text-gray-700">
-                      <span className="mr-2 text-gray-600">出典:</span>
-                      {b.sources.slice(0, 3).map((s, i) => (
-                        <a
-                          key={s.qiitaId}
-                          href={s.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline mr-3"
-                        >
-                          Qiita記事{i + 1}
-                        </a>
-                      ))}
-                      {otherCount > 0 && (
-                        <span className="text-gray-500">他 {otherCount} 件</span>
-                      )}
-                    </div>
+                  <span
+                    className={`inline-grid place-items-center w-7 h-7 rounded-full border ${
+                      isOpen ? "bg-emerald-600 text-white" : "bg-white"
+                    }`}
+                    aria-hidden
+                  >
+                    {isOpen ? "−" : "+"}
+                  </span>
+                </div>
+              </button>
+
+              {/* 展開部：関連記事をすべて列挙 */}
+              {isOpen && (
+                <div className="px-4 pb-4">
+                  {b.sources.length === 0 ? (
+                    <p className="text-sm text-gray-500">関連記事が見つかりませんでした。</p>
+                  ) : (
+                    <ul className="divide-y">
+                      {b.sources
+                        .slice() // defensive copy
+                        .sort((a, c) => (c.likes ?? 0) - (a.likes ?? 0)) // いいね順に並べ替え
+                        .map((s) => (
+                          <li key={s.qiitaId} className="py-2 flex items-start justify-between gap-3">
+                            <a
+                              href={s.url}
+                              className="underline text-sm"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {s.title}
+                            </a>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300">
+                              👍 {s.likes}{s.stocks ? ` / ⭐ ${s.stocks}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
                   )}
                 </div>
-              </div>
-            </div>
+              )}
+            </li>
           );
         })}
-
-        {items.length === 0 && !loading && (
-          <p className="text-center text-gray-500">結果が見つかりませんでした📖</p>
-        )}
-      </div>
+      </ul>
     </main>
   );
 }
