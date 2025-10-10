@@ -1,56 +1,34 @@
 // app/layout.tsx
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
-import Footer from "@/components/Footer";
+import type { Metadata } from "next";
+import Footer from "../components/Footer";
+import Link from "next/link"; // ← 追加
+import { Geist } from "next/font/google";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "えほんの森",
-  description: "児童書・絵本のランキングサイト",
+  title: "えほんの森 | 絵本ランキングとレビュー",
+  description: "AIが集めた人気絵本ランキング。親子で楽しむ物語の森。",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen flex flex-col bg-gradient-to-b from-green-50 to-amber-50 antialiased`}
-      >
-        {/* ヘッダー */}
-        <header className="w-full bg-white/70 backdrop-blur border-b border-green-100">
-          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-            <Link href="/ranking" className="text-lg font-bold text-green-800">
-              🌲 えほんの森
-            </Link>
-            <nav className="flex gap-5 text-sm text-gray-700">
+    <html lang="ja" className={geistSans.variable}>
+      <body className="min-h-screen grid grid-rows-[auto_1fr_auto]">
+        {/* ここが簡易ナビ（Headerコンポーネント不要） */}
+        <nav className="w-full border-b bg-white/80">
+          <div className="mx-auto max-w-5xl px-4 h-12 flex items-center justify-between">
+            <Link href="/" className="font-semibold text-green-900">えほんの森</Link>
+            <div className="flex items-center gap-4 text-sm">
               <Link href="/ranking" className="hover:underline">ランキング</Link>
-              <Link href="/media" className="hover:underline">媒体情報</Link>
-              <Link href="/policy/affiliate" className="hover:underline">アフィリエイト</Link>
-              <Link href="/policy/privacy" className="hover:underline">プライバシー</Link>
-              <Link href="/contact" className="hover:underline">お問い合わせ</Link>
-            </nav>
+              <Link href="/posts" className="hover:underline">記事</Link>
+              {/* 必要なら：<Link href="/contact">お問い合わせ</Link> */}
+            </div>
           </div>
-        </header>
+        </nav>
 
-        {/* メイン */}
-        <main className="flex-1">
-          {children}
-        </main>
-
-        {/* フッター */}
+        <main>{children}</main>
         <Footer />
       </body>
     </html>
