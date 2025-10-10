@@ -1,3 +1,4 @@
+// app/posts/2025-10-top-picture-books/page.tsx
 export default function Page() {
   return (
     <main className="max-w-3xl mx-auto p-6 prose">
