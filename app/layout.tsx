@@ -15,25 +15,32 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja" className={geistSans.variable}>
-      {/* ★ 既存の上部コンテンツ（あなたが作ったプライバシー等）はそのまま。
-          下の“ミニナビ”は main の先頭に“追加”するだけで、置き換えません。 */}
       <body className="min-h-screen grid grid-rows-[1fr_auto]">
         <main>
-          {/* ---- ここが追加した“ミニナビ”（非破壊） ---- */}
+          {/* ---- ミニナビ（常時表示） ---- */}
           <nav className="w-full sticky top-0 z-30 border-b bg-white/80 backdrop-blur">
             <div className="mx-auto max-w-5xl px-4 h-12 flex items-center justify-between">
               <Link href="/" className="font-semibold text-green-900">
                 えほんの森
               </Link>
+
+              {/* 左：主要ナビ */}
               <div className="flex items-center gap-4 text-sm">
                 <Link href="/ranking" className="hover:underline">ランキング</Link>
                 <Link href="/posts" className="hover:underline">記事</Link>
-                {/* 必要なら：<Link href="/contact" className="hover:underline">お問い合わせ</Link> */}
+              </div>
+
+              {/* 右：ポリシー等（常に表示） */}
+              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
+                <Link href="/policy/privacy" className="hover:underline">プライバシー</Link>
+                <Link href="/policy/affiliate" className="hover:underline">アフィリエイト表記</Link>
+                <Link href="/policy/terms" className="hover:underline">免責・利用規約</Link>
+                <Link href="/contact" className="hover:underline">お問い合わせ</Link>
               </div>
             </div>
           </nav>
 
-          {/* ここに各ページの内容（= 既存の上部リンクや説明も含む）がそのまま描画されます */}
+          {/* 各ページ本文 */}
           {children}
         </main>
 
