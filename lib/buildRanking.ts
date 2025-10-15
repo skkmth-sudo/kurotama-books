@@ -1,9 +1,11 @@
+// lib/buildRanking.ts
 export const runtime = "nodejs";
 
 const QIITA_TOKEN = process.env.QIITA_TOKEN;
 
 const TOPIC_QUERIES = [
-  "絵本", "読み聞かせ", "児童書", "育児 絵本", "科学 絵本", "動物 絵本",
+  "絵本", "読み聞かせ", "児童書", "幼児 絵本", "科学 絵本", "動物 絵本",
+  "絵本 おすすめ", "名作 絵本", "知育 絵本"
 ];
 
 type QiitaItem = {
@@ -18,12 +20,18 @@ export type BookAgg = {
   sources: Source[];
 };
 
-const POSITIVE = ["絵本","えほん","児童","幼児","子ども","こども","読み聞かせ"];
+// 子ども向け文脈の語彙を拡張
+const POSITIVE = ["絵本","えほん","児童","幼児","子ども","こども","読み聞かせ","保育","未就学","園児"];
 const NG       = ["白書","年鑑","統計","研究","論文","入門","教科書","参考書","問題集","ビジネス","投資"];
 
 const ASIN_RE   = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i;
 const ISBN_RE   = /\b97[89]\d{10}\b/;
-const TITLE_RES = [/『([^』]{2,60})』/g, /「([^」]{2,60})」/g, /《([^》]{2,60})》/g];
+// 日本語の見出しっぽいタイトルに限定
+const TITLE_RES = [
+  /『([\p{Script=Han}\p{Hiragana}\p{Katakana}0-9A-Za-z・ー !?！？]{2,40})』/gu,
+  /「([\p{Script=Han}\p{Hiragana}\p{Katakana}0-9A-Za-z・ー !?！？]{2,40})」/gu,
+  /《([\p{Script=Han}\p{Hiragana}\p{Katakana}0-9A-Za-z・ー !?！？]{2,40})》/gu,
+];
 
 function normTitle(s: string) {
   return s.replace(/[：:].+$/, "").replace(/（[^）]*）$/, "").trim();
@@ -61,7 +69,8 @@ export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]
   const bookMap = new Map<string, BookAgg>();
 
   for (const q of queries) {
-    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>1`;
+    // しきい値を少し上げる
+    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>2`;
     const items = await qiitaSearch(query, perPage);
 
     for (const it of items) {
@@ -80,6 +89,10 @@ export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]
 
       const likes  = it.likes_count  ?? 0;
       const stocks = it.stocks_count ?? 0;
+
+      // ★ 厳格フィルタ：ISBN/ASINがない場合、抽出タイトルに「絵本/児童/幼児/子ども/こども」を含むものだけ採用
+      const titleLooksKid = titles.some(t => /(絵本|児童|幼児|子ども|こども)/.test(t));
+      if (!isbn && !asin && !titleLooksKid) continue;
 
       for (const k of keys) {
         let node = bookMap.get(k);
