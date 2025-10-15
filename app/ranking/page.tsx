@@ -10,7 +10,6 @@ type BookAgg = {
   sources: Source[];
 };
 
-// 重複除去＆参照断ち（APIの配列使い回し対策）
 function dedupeByQiitaIdOrUrl(sources: Source[] = []): Source[] {
   const seen = new Set<string>();
   const out: Source[] = [];
@@ -28,16 +27,32 @@ export default function RankingPage() {
   const [q, setQ] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // 表示時はキャッシュ済みランキングを読むだけ（軽い）
+  // 表示時は軽いランキング取得のみ（10秒で諦める）
   async function load() {
-    const res = await fetch(`/api/ranking`, { next: { revalidate: 60 } });
-    const json = await res.json();
-    const safe = (json.ranking || []).map((b: BookAgg) => ({
-      ...b,
-      sources: [...(b.sources ?? [])],
-    }));
-    setItems(safe as BookAgg[]);
+    setLoading(true);
+    setError(null);
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort("timeout"), 10000);
+
+    try {
+      const res = await fetch(`/api/ranking`, { cache: "no-store", signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const safe = (json.ranking || []).map((b: BookAgg) => ({
+        ...b,
+        sources: [...(b.sources ?? [])],
+      }));
+      setItems(safe as BookAgg[]);
+    } catch (e: any) {
+      setError(e?.message || "読み込みに失敗しました");
+      setItems([]);
+    } finally {
+      clearTimeout(id);
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, []);
@@ -67,8 +82,7 @@ export default function RankingPage() {
           onClick={async () => {
             try {
               setPending(true);
-              // 再集計を明示的に実行（POST推奨。GETしかない場合は method を外してOK）
-              await fetch(`/api/rebuild`, { method: "POST" });
+              await fetch(`/api/rebuild`, { method: "POST" }); // 重い再集計
               await load();
             } finally {
               setPending(false);
@@ -84,25 +98,38 @@ export default function RankingPage() {
         </Link>
       </div>
 
+      {/* 状態表示 */}
+      {loading && (
+        <p className="text-gray-500">読み込み中…（10秒以上かかる場合はサーバ側が重い可能性があります）</p>
+      )}
+      {error && (
+        <div className="p-3 mb-4 border rounded bg-red-50 text-red-700">
+          データ取得に失敗しました：{error}
+          <button onClick={load} className="ml-3 underline">再読み込み</button>
+        </div>
+      )}
+
+      {/* データ本体 */}
       <ul className="space-y-3">
         {filtered.map((b, i) => {
           const isOpen = active === b.id;
           return (
             <li key={b.id} className="border rounded-2xl bg-white shadow-sm">
-              {/* ヘッダー行（クリックで開閉） */}
               <button
                 onClick={() => setActive(isOpen ? null : b.id)}
                 className="w-full text-left p-4 flex items-start justify-between gap-3"
               >
                 <div className="flex items-start gap-3">
-                   <BookCover isbn={b.isbn} title={b.title} />
-                  <h2 className="font-semibold text-lg">
-                    {i < 9 ? `#0${i + 1}` : `#${i + 1}`} {b.title}
-                  </h2>
-                  <div className="mt-1 text-sm text-gray-600 flex flex-wrap gap-3">
-                    <span>👍 {b.totalLikes}</span>
-                    <span>🗂️ 言及 {b.mentions}</span>
-                    {b.totalStocks ? <span>⭐ ストック {b.totalStocks}</span> : null}
+                  <BookCover isbn={b.isbn} title={b.title} />
+                  <div>
+                    <h2 className="font-semibold text-lg">
+                      {i < 9 ? `#0${i + 1}` : `#${i + 1}`} {b.title}
+                    </h2>
+                    <div className="mt-1 text-sm text-gray-600 flex flex-wrap gap-3">
+                      <span>👍 {b.totalLikes}</span>
+                      <span>🗂️ 言及 {b.mentions}</span>
+                      {b.totalStocks ? <span>⭐ ストック {b.totalStocks}</span> : null}
+                    </div>
                   </div>
                 </div>
 
@@ -126,19 +153,12 @@ export default function RankingPage() {
                       Amazonで探す
                     </a>
                   )}
-
-                  <span
-                    className={`inline-grid place-items-center w-7 h-7 rounded-full border ${
-                      isOpen ? "bg-emerald-600 text-white" : "bg-white"
-                    }`}
-                    aria-hidden
-                  >
+                  <span className={`inline-grid place-items-center w-7 h-7 rounded-full border ${isOpen ? "bg-emerald-600 text-white" : "bg-white"}`} aria-hidden>
                     {isOpen ? "−" : "+"}
                   </span>
                 </div>
               </button>
 
-              {/* 展開部：関連記事を列挙（重複除去＋非破壊ソート） */}
               {isOpen && (
                 <div className="px-4 pb-4">
                   {(b.sources?.length ?? 0) === 0 ? (
@@ -149,12 +169,7 @@ export default function RankingPage() {
                         .sort((a, c) => (c.likes ?? 0) - (a.likes ?? 0))
                         .map((s) => (
                           <li key={s.qiitaId || s.url} className="py-2 flex items-start justify-between gap-3">
-                            <a
-                              href={s.url}
-                              className="underline text-sm"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
+                            <a href={s.url} className="underline text-sm" target="_blank" rel="noopener noreferrer">
                               {s.title}
                             </a>
                             <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300">
