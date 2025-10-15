@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { readRanking } from "@/lib/rankingStore";
+import { buildRanking } from "@/lib/buildRanking";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  const ranking = await readRanking();
-  // まだ rebuild を一度もしていない場合は空配列で返る
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const fast = searchParams.get("fast") === "1";
+
+  const ranking = await buildRanking({ fast });
+
   return NextResponse.json(
-    { ranking },
-    { headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=86400" } }
+    { generatedAt: Date.now(), fast, count: ranking.length, ranking },
+    { headers: { "Cache-Control": "s-maxage=600, stale-while-revalidate=86400" } } // 10分CDN
   );
 }

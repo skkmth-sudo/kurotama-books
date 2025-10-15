@@ -22,7 +22,6 @@ export function BookCover({
     return () => { cancelled = true; };
   }, [isbn, title]);
 
-  // プレースホルダー（灰ボックス）
   if (!url) return <div className={className} aria-label="no cover" />;
 
   return (

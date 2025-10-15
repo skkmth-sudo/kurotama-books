@@ -30,15 +30,14 @@ export default function RankingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 表示時は軽いランキング取得のみ（10秒で諦める）
+  // 初回は fast=1 で軽量取得（10秒で諦める）
   async function load() {
     setLoading(true);
     setError(null);
     const ctrl = new AbortController();
     const id = setTimeout(() => ctrl.abort("timeout"), 10000);
-
     try {
-      const res = await fetch(`/api/ranking`, { cache: "no-store", signal: ctrl.signal });
+      const res = await fetch(`/api/ranking?fast=1`, { cache: "no-store", signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const safe = (json.ranking || []).map((b: BookAgg) => ({
@@ -82,7 +81,17 @@ export default function RankingPage() {
           onClick={async () => {
             try {
               setPending(true);
-              await fetch(`/api/rebuild`, { method: "POST" }); // 重い再集計
+              // フル集計して、返ってきた結果で即上書き
+              const r = await fetch(`/api/rebuild`, { method: "POST" });
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              const j = await r.json();
+              const safe = (j.ranking || []).map((b: BookAgg) => ({
+                ...b,
+                sources: [...(b.sources ?? [])],
+              }));
+              setItems(safe as BookAgg[]);
+            } catch (e) {
+              // 失敗したら軽量で再読込
               await load();
             } finally {
               setPending(false);
