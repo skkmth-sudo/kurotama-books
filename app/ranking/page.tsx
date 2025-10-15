@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BookCover } from "@/components/BookCover";
 
@@ -22,38 +22,75 @@ function dedupeByQiitaIdOrUrl(sources: Source[] = []): Source[] {
   return out;
 }
 
+// fetch をタイムアウト付きでラップ
+async function fetchWithTimeout(url: string, ms: number) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(to);
+  }
+}
+
 export default function RankingPage() {
   const [items, setItems] = useState<BookAgg[]>([]);
   const [q, setQ] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const upgradedRef = useRef(false); // フル版で置き換え済みか
 
-  // 初回からフル集計結果を取得（10秒で諦める）
-  async function load() {
+  // 初回アクセス: fast と full を同時に投げる
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort("timeout"), 10000);
-    try {
-      const res = await fetch(`/api/ranking`, { cache: "no-store", signal: ctrl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const safe = (json.ranking || []).map((b: BookAgg) => ({
-        ...b,
-        sources: [...(b.sources ?? [])],
-      }));
-      setItems(safe as BookAgg[]);
-    } catch (e: any) {
-      setError(e?.message || "読み込みに失敗しました");
-      setItems([]);
-    } finally {
-      clearTimeout(id);
-      setLoading(false);
-    }
-  }
 
-  useEffect(() => { load(); }, []);
+    const parse = (json: any) =>
+      ((json?.ranking || []) as BookAgg[]).map((b) => ({ ...b, sources: [...(b.sources ?? [])] }));
+
+    // 先に返った方を表示、後から full が返れば静かに置き換える
+    (async () => {
+      try {
+        const FAST_TIMEOUT = 12000; // 12s
+        const FULL_TIMEOUT = 25000; // 25s
+
+        const fastP = fetchWithTimeout("/api/ranking?fast=1", FAST_TIMEOUT).then(parse);
+        const fullP = fetchWithTimeout("/api/ranking", FULL_TIMEOUT).then(parse);
+
+        // どちらか先に来た方で表示
+        const first = await Promise.race([fastP, fullP]);
+        if (!cancelled) {
+          setItems(first);
+          setLoading(false);
+        }
+
+        // その後、フルが完了したら置き換え（まだ置き換えていなければ）
+        try {
+          const full = await fullP;
+          if (!cancelled && !upgradedRef.current) {
+            setItems(full);
+            upgradedRef.current = true;
+          }
+        } catch {
+          // フルが失敗しても fast 表示は維持
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e?.message || "読み込みに失敗しました");
+          setItems([]);
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -82,11 +119,13 @@ export default function RankingPage() {
       </div>
 
       {/* 状態表示 */}
-      {loading && <p className="text-gray-500">読み込み中…（最大10秒）</p>}
+      {loading && <p className="text-gray-500">読み込み中…（最大25秒）</p>}
       {error && (
         <div className="p-3 mb-4 border rounded bg-red-50 text-red-700">
-          データ取得に失敗しました：{error}
-          <button onClick={load} className="ml-3 underline">再読み込み</button>
+          データ取得に失敗しました：{error}{" "}
+          <button onClick={() => location.reload()} className="ml-3 underline">
+            再読み込み
+          </button>
         </div>
       )}
 
@@ -129,7 +168,8 @@ export default function RankingPage() {
                     <a
                       href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(b.title)}`}
                       className="inline-block text-xs px-3 py-1 rounded bg-gray-700 text-white"
-                      target="_blank" rel="noopener noreferrer"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                     >
                       Amazonで探す
