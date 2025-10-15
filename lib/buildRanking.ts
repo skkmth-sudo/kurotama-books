@@ -21,13 +21,13 @@ export type BookAgg = {
   sources: Source[];
 };
 
-/** 子ども向け文脈（本文全体で判定用） */
+/** 本文全体での子ども向け判定 */
 const POSITIVE = ["絵本","えほん","児童","幼児","赤ちゃん","読み聞かせ","保育","未就学","園児"];
 const NG       = ["白書","年鑑","統計","論文","参考書","問題集","研究","業務", "仕様", "設計"];
 
-/** “絵本でない”タイトルを弾く強力フィルタ */
+/** “絵本でない”タイトルを弾く（強すぎない程度） */
 const BAN_TITLE =
-  /(ログイン|トップページ|管理画面|設定|一覧|検索条件|サンプル|チュートリアル|テンプレ|ダッシュボード|デモ|テスト|アプリ|ページ|API|SQL|AWS|Docker|Laravel|Rails|React|Next\.js|Java|Kotlin|Python|Go|TypeScript|エンジニア|アジャイル|サムライ|アルゴリズム)/i;
+  /(ログイン|トップページ|管理画面|設定|一覧|検索条件|ダッシュボード|API|SQL|AWS|Docker|Laravel|Rails|React|Next\.js|Java|Kotlin|Python|Go|TypeScript|エンジニア|アジャイル|アルゴリズム)/i;
 
 /** “絵本らしい”語（タイトル側） */
 const MUST_TITLE = /(絵本|えほん|児童|幼児|赤ちゃん|読み聞かせ|図鑑|紙芝居|しかけ絵本)/;
@@ -55,6 +55,68 @@ function looksLikeKidContext(t: string) {
   return hasPos && !hasNg;
 }
 
+/* ---------- 失敗しても落ちない Google Books 補助判定 ---------- */
+
+type GBMeta = { ok: boolean; title?: string; isbn?: string; categories?: string[] };
+const gbCache = new Map<string, GBMeta>();
+
+function isPictureBookCats(categories: string[] = []) {
+  const joined = categories.join(" / ");
+  return /(絵本|児童|児童文学|Children's Books|Picture Books|Baby|Toddler|Juvenile)/i.test(joined);
+}
+
+async function fetchJSONWithTimeout(url: string, ms = 6000): Promise<any | null> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function googleBooksLookupByIsbn(isbn: string): Promise<GBMeta | null> {
+  const key = `isbn:${isbn}`;
+  if (gbCache.has(key)) return gbCache.get(key)!;
+  const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=1&langRestrict=ja`;
+  const j = await fetchJSONWithTimeout(url);
+  if (!j) return null;
+  const item = j?.items?.[0];
+  const cats: string[] = item?.volumeInfo?.categories ?? [];
+  const title: string | undefined = item?.volumeInfo?.title;
+  const ok = isPictureBookCats(cats);
+  const meta = { ok, title, isbn, categories: cats };
+  gbCache.set(key, meta);
+  return meta;
+}
+
+async function googleBooksLookupByTitle(title: string): Promise<GBMeta | null> {
+  const key = `title:${title}`;
+  if (gbCache.has(key)) return gbCache.get(key)!;
+  const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}&maxResults=3&langRestrict=ja`;
+  const j = await fetchJSONWithTimeout(url);
+  if (!j) return null;
+  const items = Array.isArray(j?.items) ? j.items : [];
+  let pick: any = null;
+  for (const it of items) {
+    const cats: string[] = it?.volumeInfo?.categories ?? [];
+    if (isPictureBookCats(cats)) { pick = it; break; }
+  }
+  const cats: string[] = pick?.volumeInfo?.categories ?? [];
+  const tOut: string | undefined = pick?.volumeInfo?.title ?? title;
+  const isbn = pick?.volumeInfo?.industryIdentifiers?.find((x: any) => /ISBN_13/.test(x?.type))?.identifier;
+  const ok = isPictureBookCats(cats);
+  const meta = { ok, title: tOut, isbn, categories: cats };
+  gbCache.set(key, meta);
+  return meta;
+}
+
+/* -------------------------------------------------------------- */
+
 async function qiitaSearch(query: string, perPage: number): Promise<QiitaItem[]> {
   const url = `https://qiita.com/api/v2/items?per_page=${perPage}&query=${encodeURIComponent(query)}`;
   const res = await fetch(url, {
@@ -65,60 +127,6 @@ async function qiitaSearch(query: string, perPage: number): Promise<QiitaItem[]>
   return res.json();
 }
 
-/* ---------------- Google Books で“絵本”検証 ---------------- */
-
-type GBMeta = {
-  ok: boolean;
-  title?: string;
-  isbn?: string;
-  categories?: string[];
-};
-
-const gbCache = new Map<string, GBMeta>();
-
-async function googleBooksLookupByIsbn(isbn: string): Promise<GBMeta> {
-  const key = `isbn:${isbn}`;
-  if (gbCache.has(key)) return gbCache.get(key)!;
-  const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=1`;
-  const r = await fetch(url, { cache: "no-store" });
-  const j = await r.json().catch(() => ({}));
-  const item = j?.items?.[0];
-  const cats: string[] = item?.volumeInfo?.categories ?? [];
-  const title: string | undefined = item?.volumeInfo?.title;
-  const ok = isPictureBookCats(cats);
-  const meta = { ok, title, isbn, categories: cats };
-  gbCache.set(key, meta);
-  return meta;
-}
-
-async function googleBooksLookupByTitle(title: string): Promise<GBMeta> {
-  const key = `title:${title}`;
-  if (gbCache.has(key)) return gbCache.get(key)!;
-  const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}&langRestrict=ja&maxResults=3`;
-  const r = await fetch(url, { cache: "no-store" });
-  const j = await r.json().catch(() => ({}));
-  const items = Array.isArray(j?.items) ? j.items : [];
-  let pick: any = null;
-  for (const it of items) {
-    const cats: string[] = it?.volumeInfo?.categories ?? [];
-    if (isPictureBookCats(cats)) { pick = it; break; }
-  }
-  const cats: string[] = pick?.volumeInfo?.categories ?? [];
-  const titleOut: string | undefined = pick?.volumeInfo?.title ?? title;
-  const isbn = pick?.volumeInfo?.industryIdentifiers?.find((x: any) => /ISBN_13/.test(x?.type))?.identifier;
-  const ok = isPictureBookCats(cats);
-  const meta = { ok, title: titleOut, isbn, categories: cats };
-  gbCache.set(key, meta);
-  return meta;
-}
-
-function isPictureBookCats(categories: string[] = []) {
-  const joined = categories.join(" / ");
-  return /(絵本|児童|児童文学|Children's Books|Picture Books|Baby|Toddler|Juvenile)/i.test(joined);
-}
-
-/* ----------------------------------------------------------- */
-
 /** fast: true ならクエリ数と件数を絞って高速に返す */
 export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]> {
   const fast = !!opts?.fast;
@@ -128,52 +136,62 @@ export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]
   const bookMap = new Map<string, BookAgg>();
 
   for (const q of queries) {
-    // しきい値を少し上げる
-    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>3`;
+    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>2`;
     const items = await qiitaSearch(query, perPage);
 
     for (const it of items) {
       const ctx = `${it.title}\n${it.body ?? ""}`;
       if (!looksLikeKidContext(ctx)) continue;
 
-      // タイトル候補抽出
+      // タイトル候補
       const titles = extractTitles(ctx).filter(t => !BAN_TITLE.test(t));
       if (titles.length === 0) continue;
 
       // 参照抽出
-      const asin   = ASIN_RE.exec(ctx)?.[1];
-      const isbn   = ISBN_RE.exec(ctx)?.[0];
+      const asin = ASIN_RE.exec(ctx)?.[1];
+      const isbn = ISBN_RE.exec(ctx)?.[0];
 
-      // ---- Google Books で “絵本” 検証 ----
-      let validated = false;
-      let norm = titles[0];
+      // ---- “採用するか” のゆるやかな判定 ----
+      // 1) ISBN/ASIN があれば採用
+      // 2) タイトルに絵本系語（MUST_TITLE）があれば採用
+      // 3) 1/2で判定が付かず、Google Books が「絵本」なら採用
+      let keep = false;
+      let normTitleStr = titles[0];
 
-      if (isbn) {
-        const meta = await googleBooksLookupByIsbn(isbn);
-        validated = meta.ok;
-        if (meta.title) norm = meta.title;
+      if (isbn || asin) {
+        keep = true;
+        // ISBNがあるならGBで正規化（失敗しても無視）
+        if (isbn) {
+          const meta = await googleBooksLookupByIsbn(isbn);
+          if (meta?.title) normTitleStr = meta.title;
+        }
+      } else if (titles.some(t => MUST_TITLE.test(t))) {
+        keep = true;
+        const meta = await googleBooksLookupByTitle(titles[0]); // あれば正規化
+        if (meta?.title) normTitleStr = meta.title;
       } else {
-        // ISBN/ASINが無い場合は、見出しに絵本語が入り、かつGBカテゴリで絵本判定
-        if (titles.some(t => MUST_TITLE.test(t))) {
-          const meta = await googleBooksLookupByTitle(titles[0]);
-          validated = meta.ok;
-          if (meta.title) norm = meta.title;
+        const meta = await googleBooksLookupByTitle(titles[0]); // 最後の補助
+        if (meta?.ok) {
+          keep = true;
+          if (meta.title) normTitleStr = meta.title;
+          if (meta.isbn) { // ISBNが取れたらキーを安定化
+            // 上書き採用
+          }
         }
       }
 
-      if (!validated) continue; // ← 絵本として検証できないものは除外
+      if (!keep) continue;
 
       const likes  = it.likes_count  ?? 0;
       const stocks = it.stocks_count ?? 0;
 
-      // 集約キーを作成
-      const key = isbn ? `isbn:${isbn}` : `title:${norm}`;
+      const key = isbn ? `isbn:${isbn}` : `title:${normTitleStr}`;
 
       let node = bookMap.get(key);
       if (!node) {
         node = {
           id: key,
-          title: norm,
+          title: normTitleStr,
           asin: asin || undefined,
           isbn: isbn || undefined,
           mentions: 0,
@@ -196,8 +214,8 @@ export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]
     }
   }
 
-  // 最後に“最低ライン”を課す（言及2回以上 or ISBNあり）
-  const arr = [...bookMap.values()].filter(b => b.mentions >= 2 || !!b.isbn);
+  // 最低ライン：言及1以上（ISBNありは0でもOKだが、実質1になる）
+  const arr = [...bookMap.values()].filter(b => b.mentions >= 1);
 
   return arr.sort((a, b) => b.score - a.score).slice(0, 100);
 }
