@@ -24,13 +24,15 @@ export type BookAgg = {
 const POSITIVE = ["絵本","えほん","児童","幼児","子ども","こども","読み聞かせ","保育","未就学","園児"];
 const NG       = ["白書","年鑑","統計","研究","論文","入門","教科書","参考書","問題集","ビジネス","投資"];
 
-const ASIN_RE   = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i;
-const ISBN_RE   = /\b97[89]\d{10}\b/;
-// 日本語の見出しっぽいタイトルに限定
+const ASIN_RE = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i;
+const ISBN_RE = /\b97[89]\d{10}\b/;
+
+// ✅ Unicode プロパティを使わない、安全なパターン
+//   2〜40 文字の「閉じ括弧と改行を含まない」文字列を抽出
 const TITLE_RES = [
-  /『([\p{Script=Han}\p{Hiragana}\p{Katakana}0-9A-Za-z・ー !?！？]{2,40})』/gu,
-  /「([\p{Script=Han}\p{Hiragana}\p{Katakana}0-9A-Za-z・ー !?！？]{2,40})」/gu,
-  /《([\p{Script=Han}\p{Hiragana}\p{Katakana}0-9A-Za-z・ー !?！？]{2,40})》/gu,
+  /『([^』\r\n]{2,40})』/g,
+  /「([^」\r\n]{2,40})」/g,
+  /《([^》\r\n]{2,40})》/g,
 ];
 
 function normTitle(s: string) {
