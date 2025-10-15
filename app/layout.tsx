@@ -34,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
                 <Link href="/policy/privacy" className="hover:underline">プライバシー</Link>
                 <Link href="/policy/affiliate" className="hover:underline">アフィリエイト表記</Link>
-                <Link href="/policy/terms" className="hover:underline">免責・利用規約</Link>
+                
                 <Link href="/contact" className="hover:underline">お問い合わせ</Link>
               </div>
             </div>
