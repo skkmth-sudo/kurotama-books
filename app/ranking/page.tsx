@@ -26,18 +26,17 @@ export default function RankingPage() {
   const [items, setItems] = useState<BookAgg[]>([]);
   const [q, setQ] = useState("");
   const [active, setActive] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 初回は fast=1 で軽量取得（10秒で諦める）
+  // 初回からフル集計結果を取得（10秒で諦める）
   async function load() {
     setLoading(true);
     setError(null);
     const ctrl = new AbortController();
     const id = setTimeout(() => ctrl.abort("timeout"), 10000);
     try {
-      const res = await fetch(`/api/ranking?fast=1`, { cache: "no-store", signal: ctrl.signal });
+      const res = await fetch(`/api/ranking`, { cache: "no-store", signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const safe = (json.ranking || []).map((b: BookAgg) => ({
@@ -77,40 +76,13 @@ export default function RankingPage() {
           className="border rounded px-3 py-2 w-80"
           placeholder="タイトル・記事を検索"
         />
-        <button
-          onClick={async () => {
-            try {
-              setPending(true);
-              // フル集計して、返ってきた結果で即上書き
-              const r = await fetch(`/api/rebuild`, { method: "POST" });
-              if (!r.ok) throw new Error(`HTTP ${r.status}`);
-              const j = await r.json();
-              const safe = (j.ranking || []).map((b: BookAgg) => ({
-                ...b,
-                sources: [...(b.sources ?? [])],
-              }));
-              setItems(safe as BookAgg[]);
-            } catch (e) {
-              // 失敗したら軽量で再読込
-              await load();
-            } finally {
-              setPending(false);
-            }
-          }}
-          className="px-4 py-2 rounded bg-emerald-600 text-white disabled:opacity-60"
-          disabled={pending}
-        >
-          {pending ? "再集計中…" : "再集計"}
-        </button>
         <Link href="/posts" className="ml-auto underline text-sm text-blue-700">
           記事一覧へ
         </Link>
       </div>
 
       {/* 状態表示 */}
-      {loading && (
-        <p className="text-gray-500">読み込み中…（10秒以上かかる場合はサーバ側が重い可能性があります）</p>
-      )}
+      {loading && <p className="text-gray-500">読み込み中…（最大10秒）</p>}
       {error && (
         <div className="p-3 mb-4 border rounded bg-red-50 text-red-700">
           データ取得に失敗しました：{error}
@@ -118,12 +90,13 @@ export default function RankingPage() {
         </div>
       )}
 
-      {/* データ本体 */}
+      {/* 本体 */}
       <ul className="space-y-3">
         {filtered.map((b, i) => {
           const isOpen = active === b.id;
           return (
             <li key={b.id} className="border rounded-2xl bg-white shadow-sm">
+              {/* ヘッダー（開閉） */}
               <button
                 onClick={() => setActive(isOpen ? null : b.id)}
                 className="w-full text-left p-4 flex items-start justify-between gap-3"
@@ -162,12 +135,18 @@ export default function RankingPage() {
                       Amazonで探す
                     </a>
                   )}
-                  <span className={`inline-grid place-items-center w-7 h-7 rounded-full border ${isOpen ? "bg-emerald-600 text-white" : "bg-white"}`} aria-hidden>
+                  <span
+                    className={`inline-grid place-items-center w-7 h-7 rounded-full border ${
+                      isOpen ? "bg-emerald-600 text-white" : "bg-white"
+                    }`}
+                    aria-hidden
+                  >
                     {isOpen ? "−" : "+"}
                   </span>
                 </div>
               </button>
 
+              {/* 展開部：関連記事 */}
               {isOpen && (
                 <div className="px-4 pb-4">
                   {(b.sources?.length ?? 0) === 0 ? (

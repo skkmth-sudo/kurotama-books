@@ -24,11 +24,14 @@ export type BookAgg = {
 const POSITIVE = ["絵本","えほん","児童","幼児","子ども","こども","読み聞かせ","保育","未就学","園児"];
 const NG       = ["白書","年鑑","統計","研究","論文","入門","教科書","参考書","問題集","ビジネス","投資"];
 
+// “絵本らしさ”の判定に使う
+const MUST_TITLE = /(絵本|えほん|児童|幼児|赤ちゃん|子ども|こども|読み聞かせ|図鑑|しかけ絵本|紙芝居)/;
+const BAN_TITLE  = /(エンジニア|アジャイル|サムライ|ログイン|トップページ|管理画面|設計|プログラミング|入門|基礎|独学|大全|リファレンス|デザイン|UI|UX|API|データベース|SQL|AWS|Docker|Laravel|Rails|React|Next\.js|Java|iOS|Android|Kotlin|Python|Go|C\+\+|TypeScript)/i;
+
 const ASIN_RE = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i;
 const ISBN_RE = /\b97[89]\d{10}\b/;
 
-// ✅ Unicode プロパティを使わない、安全なパターン
-//   2〜40 文字の「閉じ括弧と改行を含まない」文字列を抽出
+// Unicode プロパティ未使用（環境依存を避ける）
 const TITLE_RES = [
   /『([^』\r\n]{2,40})』/g,
   /「([^」\r\n]{2,40})」/g,
@@ -71,8 +74,8 @@ export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]
   const bookMap = new Map<string, BookAgg>();
 
   for (const q of queries) {
-    // しきい値を少し上げる
-    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>2`;
+    // 絞り込みを少し強めに（stocks:>3）
+    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>3`;
     const items = await qiitaSearch(query, perPage);
 
     for (const it of items) {
@@ -83,18 +86,26 @@ export async function buildRanking(opts?: { fast?: boolean }): Promise<BookAgg[]
       const isbn   = ISBN_RE.exec(ctx)?.[0];
       const titles = extractTitles(ctx);
 
+      // ---- ここが重要：絵本判定 ---------------------------------
+      // 1) タイトルに明確な“絵本語”が入る  or  2) ASIN/ISBN が見つかる
+      const titleLooksKid = titles.some(t => MUST_TITLE.test(t));
+      const titleLooksBan = titles.some(t => BAN_TITLE.test(t));
+
+      // “本じゃなさそう”な見出しは弾く
+      if (titleLooksBan) continue;
+
+      // ISBN/ASINが無い場合は、見出しに“絵本語”が必須
+      if (!isbn && !asin && !titleLooksKid) continue;
+      // -----------------------------------------------------------
+
+      const likes  = it.likes_count  ?? 0;
+      const stocks = it.stocks_count ?? 0;
+
       const keys: string[] = [];
       if (isbn) keys.push(`isbn:${isbn}`);
       if (asin) keys.push(`asin:${asin}`);
       for (const t of titles) keys.push(`title:${t}`);
       if (keys.length === 0) continue;
-
-      const likes  = it.likes_count  ?? 0;
-      const stocks = it.stocks_count ?? 0;
-
-      // ★ 厳格フィルタ：ISBN/ASINがない場合、抽出タイトルに「絵本/児童/幼児/子ども/こども」を含むものだけ採用
-      const titleLooksKid = titles.some(t => /(絵本|児童|幼児|子ども|こども)/.test(t));
-      if (!isbn && !asin && !titleLooksKid) continue;
 
       for (const k of keys) {
         let node = bookMap.get(k);
