@@ -1,8 +1,5 @@
 ﻿{
   "crons": [
-    {
-      "path": "/api/rebuild",
-      "schedule": "0 18 * * *"
-    }
+    { "path": "/api/rebuild", "schedule": "0 18 * * *" }
   ]
 }
