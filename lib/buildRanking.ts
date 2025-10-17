@@ -1,10 +1,9 @@
-export const runtime = "nodejs";
-
+@'
 import { extractBookRefs } from "./extractBookRefs";
 
 const QIITA_TOKEN = process.env.QIITA_TOKEN;
 
-// 絵本関連クエリ（広め）
+// 絵本寄りのクエリ
 const TOPIC_QUERIES = [
   "絵本", "読み聞かせ", "児童書", "幼児 絵本", "赤ちゃん 絵本",
   "知育 絵本", "名作 絵本", "ロングセラー 絵本", "ベストセラー 絵本"
@@ -15,14 +14,14 @@ type QiitaItem = {
   likes_count?: number; stocks_count?: number;
 };
 
-// UI系ノイズ語（タイトル/本文の周辺にあれば除外）
+// 技術/UI系ノイズをはじく
 const BAN_WORDS =
-  /(ログイン|トップページ|管理画面|設定|一覧|検索条件|ダッシュボード|テンプレ|サンプル|チュートリアル|API|SQL|AWS|Docker|React|Next\.js|Rails|Laravel|Python|Go|TypeScript|Kotlin|Java|エンジニア|設計|アルゴリズム)/i;
+  /(ログイン|トップページ|管理画面|設定|一覧|検索条件|ダッシュボード|テンプレ|サンプル|チュートリアル|API|SQL|HTTP|AWS|Docker|React|Next\.js|Rails|Laravel|Python|Go|TypeScript|Kotlin|Java|GitHub|CI|CD|サーバ|エンジニア|設計|アルゴリズム)/i;
 
 export type Source = { qiitaId: string; url: string; title: string; likes: number; stocks: number };
 export type BookAgg = {
-  id: string;                 // isbn:xxxx or asin:XXXX or title:xxx（原則 isbn/asin）
-  title: string;              // 本の推定タイトル（ISBNがあれば後述API等で整える余地）
+  id: string;                 // isbn:xxxx or asin:XXXX
+  title: string;
   asin?: string; isbn?: string;
   mentions: number;
   totalLikes: number;
@@ -39,25 +38,26 @@ async function qiitaSearch(query: string, page: number, perPage: number): Promis
   return r.json();
 }
 
-/** TechBookRank 方式：ASIN/ISBN がある記事だけ集計。ページは控えめに複数回。 */
+/** ISBN/ASIN が本文にある記事のみ集計（タイトル由来は禁止） */
 export async function buildRanking(opts?: { pages?: number; perPage?: number }): Promise<BookAgg[]> {
-  const pages = Math.max(1, Math.min(4, opts?.pages ?? 2));   // クエリごと最大2ページ
-  const perPage = Math.max(10, Math.min(100, opts?.perPage ?? 50));
+  const pages = Math.max(1, Math.min(3, opts?.pages ?? 2));   // クエリごと最大2ページ
+  const perPage = Math.max(10, Math.min(50, opts?.perPage ?? 30));
 
   const bookMap = new Map<string, BookAgg>();
 
   for (const q of TOPIC_QUERIES) {
-    const query = `(tag:絵本 OR title:${q} OR body:${q}) stocks:>1`;
+    // タグ/本文/タイトルのいずれかにキーワード、かつ stocks>1
+    const query = `(tag:絵本 OR tag:児童書 OR title:${q} OR body:${q}) stocks:>1`;
 
     for (let page = 1; page <= pages; page++) {
       const items = await qiitaSearch(query, page, perPage);
 
       for (const it of items) {
         const ctx = `${it.title}\n${it.body ?? ""}`;
-        if (BAN_WORDS.test(ctx)) continue;                 // UI系除外
+        if (BAN_WORDS.test(ctx)) continue;
 
         const { asin, isbn, titles } = extractBookRefs(ctx);
-        if (!asin && !isbn) continue;                       // ★ 明示リンク必須
+        if (!asin && !isbn) continue; // ★ ISBN/ASIN 必須
 
         const key = isbn ? `isbn:${isbn}` : `asin:${asin}`;
         const likes  = it.likes_count  ?? 0;
@@ -76,7 +76,8 @@ export async function buildRanking(opts?: { pages?: number; perPage?: number }):
         node.mentions += 1;
         node.totalLikes += likes;
         node.totalStocks += stocks;
-        node.score = node.totalLikes + Math.round(node.totalStocks * 0.3); // Stocksを軽く加点
+        // いいね重視 + ストック少し加点
+        node.score = node.totalLikes + Math.round(node.totalStocks * 0.3);
 
         if (!node.sources.some(s => s.qiitaId === it.id)) {
           node.sources.push({ qiitaId: it.id, url: it.url, title: it.title, likes, stocks });
@@ -85,9 +86,9 @@ export async function buildRanking(opts?: { pages?: number; perPage?: number }):
     }
   }
 
-  // 偶発ヒットを除去（言及2回以上）
   return [...bookMap.values()]
-    .filter(b => b.mentions >= 2)
+    .filter(b => b.mentions >= 1) // とりあえず単発も許可。増えすぎたら >=2 へ
     .sort((a, b) => b.score - a.score)
     .slice(0, 100);
 }
+'@ | Set-Content -Path lib/buildRanking.ts -Encoding utf8 -NoNewline
