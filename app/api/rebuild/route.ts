@@ -1,12 +1,13 @@
-@'
 import { NextResponse } from "next/server";
 import { buildRanking } from "@/lib/buildRanking";
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const secret = url.searchParams.get("secret");
   const expected = process.env.REBUILD_SECRET;
-  if (!expected || secret !== expected) {
+  if (!expected || !secret || secret !== expected) {
     return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
   }
   try {
@@ -16,4 +17,3 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: e?.message ?? String(e) }, { status: 500 });
   }
 }
-'@ | Set-Content -Path app/api/rebuild/route.ts -Encoding utf8 -NoNewline
