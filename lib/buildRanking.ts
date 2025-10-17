@@ -1,5 +1,4 @@
-@'
-import { extractBookRefs } from "./extractBookRefs";
+﻿import { extractBookRefs } from "./extractBookRefs";
 
 const QIITA_TOKEN = process.env.QIITA_TOKEN;
 
@@ -14,9 +13,10 @@ type QiitaItem = {
   likes_count?: number; stocks_count?: number;
 };
 
-// 技術/UI系ノイズをはじく
+// ここが絞り込みの肝
+const POSITIVE = /(絵本|児童書|児童|幼児|赤ちゃん|読み聞かせ|寝かしつけ|保育園|幼稚園|年少|年中|年長|こども|子ども|小学生)/i;
 const BAN_WORDS =
-  /(ログイン|トップページ|管理画面|設定|一覧|検索条件|ダッシュボード|テンプレ|サンプル|チュートリアル|API|SQL|HTTP|AWS|Docker|React|Next\.js|Rails|Laravel|Python|Go|TypeScript|Kotlin|Java|GitHub|CI|CD|サーバ|エンジニア|設計|アルゴリズム)/i;
+  /(ログイン|トップページ|管理画面|設定|一覧|検索条件|ダッシュボード|テンプレ|サンプル|チュートリアル|API|HTTP|HTTPS|TCP|IP|DNS|SSL|TLS|ネットワーク|セキュリティ|ITパスポート|情報処理|プログラミング|Git|GitHub|CI|CD|AWS|GCP|Azure|Docker|Kubernetes|Linux|Windows|Mac|React|Next\.js|Vue|Rails|Laravel|Django|Python|Go|TypeScript|Kotlin|Java|Android|iPhone|スマホアプリ|エンジニア|アルゴリズム|設計|サーバ)/i;
 
 export type Source = { qiitaId: string; url: string; title: string; likes: number; stocks: number };
 export type BookAgg = {
@@ -38,15 +38,14 @@ async function qiitaSearch(query: string, page: number, perPage: number): Promis
   return r.json();
 }
 
-/** ISBN/ASIN が本文にある記事のみ集計（タイトル由来は禁止） */
+/** ISBN/ASIN が本文にある & 絵本系コンテキストの時だけ集計 */
 export async function buildRanking(opts?: { pages?: number; perPage?: number }): Promise<BookAgg[]> {
-  const pages = Math.max(1, Math.min(3, opts?.pages ?? 2));   // クエリごと最大2ページ
+  const pages = Math.max(1, Math.min(3, opts?.pages ?? 2));
   const perPage = Math.max(10, Math.min(50, opts?.perPage ?? 30));
 
   const bookMap = new Map<string, BookAgg>();
 
   for (const q of TOPIC_QUERIES) {
-    // タグ/本文/タイトルのいずれかにキーワード、かつ stocks>1
     const query = `(tag:絵本 OR tag:児童書 OR title:${q} OR body:${q}) stocks:>1`;
 
     for (let page = 1; page <= pages; page++) {
@@ -54,10 +53,12 @@ export async function buildRanking(opts?: { pages?: number; perPage?: number }):
 
       for (const it of items) {
         const ctx = `${it.title}\n${it.body ?? ""}`;
-        if (BAN_WORDS.test(ctx)) continue;
+
+        // 技術・UI系は除外、絵本の肯定語が本文に無ければ除外
+        if (BAN_WORDS.test(ctx) || !POSITIVE.test(ctx)) continue;
 
         const { asin, isbn, titles } = extractBookRefs(ctx);
-        if (!asin && !isbn) continue; // ★ ISBN/ASIN 必須
+        if (!asin && !isbn) continue; // ISBN/ASIN必須
 
         const key = isbn ? `isbn:${isbn}` : `asin:${asin}`;
         const likes  = it.likes_count  ?? 0;
@@ -76,7 +77,6 @@ export async function buildRanking(opts?: { pages?: number; perPage?: number }):
         node.mentions += 1;
         node.totalLikes += likes;
         node.totalStocks += stocks;
-        // いいね重視 + ストック少し加点
         node.score = node.totalLikes + Math.round(node.totalStocks * 0.3);
 
         if (!node.sources.some(s => s.qiitaId === it.id)) {
@@ -87,8 +87,7 @@ export async function buildRanking(opts?: { pages?: number; perPage?: number }):
   }
 
   return [...bookMap.values()]
-    .filter(b => b.mentions >= 1) // とりあえず単発も許可。増えすぎたら >=2 へ
+    .filter(b => b.mentions >= 1) // 件数が少なければ 1、増えたら 2 に上げる
     .sort((a, b) => b.score - a.score)
     .slice(0, 100);
 }
-'@ | Set-Content -Path lib/buildRanking.ts -Encoding utf8 -NoNewline
